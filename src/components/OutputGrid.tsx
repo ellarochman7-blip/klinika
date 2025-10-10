@@ -13,9 +13,10 @@ interface GeneratedImage {
 interface OutputGridProps {
   images: GeneratedImage[];
   onDownload: (imageUrl: string, prompt: string) => void;
+  onGenerateVideo: (imageUrl: string) => void;
 }
 
-export default function OutputGrid({ images, onDownload }: OutputGridProps) {
+export default function OutputGrid({ images, onDownload, onGenerateVideo }: OutputGridProps) {
   if (images.length === 0) {
     return (
       <motion.div
@@ -29,7 +30,7 @@ export default function OutputGrid({ images, onDownload }: OutputGridProps) {
           </svg>
         </div>
         <p className="text-gray-500 text-lg mb-2">Upload an image and click Generate</p>
-        <p className="text-gray-400 text-sm">Your AI-generated images will appear here</p>
+        <p className="text-gray-400 text-sm">Your AI-generated images or videos will appear here</p>
       </motion.div>
     );
   }
@@ -46,24 +47,64 @@ export default function OutputGrid({ images, onDownload }: OutputGridProps) {
         >
           <div className="aspect-square relative bg-gray-50">
             {image.isProcessing ? (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="text-center space-y-3">
-                  <Loader className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
-                  <p className="text-sm text-gray-600">Processing...</p>
+              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-purple-50 to-blue-50">
+                <div className="text-center space-y-4 p-6">
+                  {image.prompt.includes('VIDEO') ? (
+                    <>
+                      <div className="relative">
+                        <Loader className="w-12 h-12 text-purple-500 animate-spin mx-auto" />
+                        <svg className="w-6 h-6 text-purple-600 absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-purple-700 mb-1">🎬 Generating Video</p>
+                        <p className="text-xs text-gray-600">This may take 60-120 seconds...</p>
+                        <div className="mt-2 flex items-center justify-center space-x-1">
+                          <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                          <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                          <div className="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Loader className="w-8 h-8 text-blue-500 animate-spin mx-auto" />
+                      <p className="text-sm text-gray-600">Processing...</p>
+                    </>
+                  )}
                 </div>
               </div>
             ) : image.imageUrl ? (
               <>
-                <img
-                  src={image.imageUrl}
-                  alt={`Generated from: ${image.prompt}`}
-                  className="w-full h-full object-cover"
-                />
+                {image.imageUrl.startsWith('data:video/') ? (
+                  // Display video
+                  <video
+                    src={image.imageUrl}
+                    controls
+                    loop
+                    autoPlay
+                    muted
+                    playsInline
+                    className="w-full h-full object-cover"
+                  >
+                    Your browser does not support the video tag.
+                  </video>
+                ) : (
+                  // Display image
+                  <img
+                    src={image.imageUrl}
+                    alt={`Generated from: ${image.prompt}`}
+                    className="w-full h-full object-cover"
+                  />
+                )}
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
                   onClick={() => onDownload(image.imageUrl!, image.prompt)}
                   className="absolute top-3 right-3 bg-white bg-opacity-90 hover:bg-opacity-100 p-2 rounded-full shadow-md transition-all duration-200"
+                  title="Download"
                 >
                   <Download className="w-4 h-4 text-gray-700" />
                 </motion.button>
@@ -85,15 +126,33 @@ export default function OutputGrid({ images, onDownload }: OutputGridProps) {
               <p className="text-red-500 text-xs mt-2 font-medium">Error: {image.error}</p>
             )}
             {image.imageUrl && (
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={() => onDownload(image.imageUrl!, image.prompt)}
-                className="w-full mt-3 flex items-center justify-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 text-sm font-medium"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Download
-              </motion.button>
+              <div className="mt-3 space-y-2">
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={() => onDownload(image.imageUrl!, image.prompt)}
+                  className="w-full flex items-center justify-center px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-md transition-colors duration-200 text-sm font-medium"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download
+                </motion.button>
+                
+                {/* Only show Generate Video button for static images, not videos */}
+                {!image.imageUrl.startsWith('data:video/') && (
+                  <motion.button
+                    whileHover={{ scale: 1.02 }}
+                    whileTap={{ scale: 0.98 }}
+                    onClick={() => onGenerateVideo(image.imageUrl!)}
+                    className="w-full flex items-center justify-center px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white rounded-md transition-colors duration-200 text-sm font-medium"
+                  >
+                    <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Generate Video
+                  </motion.button>
+                )}
+              </div>
             )}
           </div>
         </motion.div>
