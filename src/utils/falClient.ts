@@ -305,15 +305,60 @@ export const generateImageWithFal = async (
   }
 };
 
+// Helper function to add delay
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Retry configuration
+const MAX_RETRIES = 5;
+const INITIAL_RETRY_DELAY_MS = 2000; // Start with 2 seconds
+
+// Helper function to generate image with retry logic and exponential backoff
+const generateImageWithRetry = async (
+  imageFile: File,
+  prompt: string,
+  promptIndex: number,
+  options?: GenerationOptions,
+  retryCount = 0
+): Promise<string> => {
+  try {
+    console.log(`Generating image ${promptIndex + 1}...`);
+    return await generateImageWithFal(imageFile, prompt, options);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // Check if it's a rate limit error (429)
+    const isRateLimitError = errorMessage.includes('429') || 
+                             errorMessage.includes('RESOURCE_EXHAUSTED') ||
+                             errorMessage.includes('quota');
+    
+    // Check if it's a daily quota exhaustion (can't retry - need to wait until tomorrow)
+    const isDailyQuotaExhausted = errorMessage.includes('PerDay') || 
+                                   errorMessage.includes('limit: 0');
+    
+    if (isRateLimitError && !isDailyQuotaExhausted && retryCount < MAX_RETRIES) {
+      // Calculate exponential backoff delay with jitter to prevent thundering herd
+      const baseDelay = INITIAL_RETRY_DELAY_MS * Math.pow(2, retryCount);
+      const jitter = Math.random() * 1000; // Add up to 1 second of random jitter
+      const retryDelay = baseDelay + jitter;
+      console.log(`Image ${promptIndex + 1} rate limited. Retrying in ${(retryDelay / 1000).toFixed(1)}s (attempt ${retryCount + 1}/${MAX_RETRIES})...`);
+      await delay(retryDelay);
+      return generateImageWithRetry(imageFile, prompt, promptIndex, options, retryCount + 1);
+    }
+    
+    throw error;
+  }
+};
+
 export const batchGenerateImages = async (
   imageFile: File,
   prompts: string[],
   options?: GenerationOptions
 ): Promise<Array<{ prompt: string; imageUrl: string | null; error?: string }>> => {
+  // Process all images in parallel, each with its own retry logic
   const results = await Promise.allSettled(
-    prompts.map(async (prompt) => {
+    prompts.map(async (prompt, index) => {
       try {
-        const imageUrl = await generateImageWithFal(imageFile, prompt, options);
+        const imageUrl = await generateImageWithRetry(imageFile, prompt, index, options);
         return { prompt, imageUrl };
       } catch (error) {
         console.error(`Failed to process prompt "${prompt}":`, error);
